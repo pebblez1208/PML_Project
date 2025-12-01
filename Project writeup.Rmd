@@ -1,0 +1,137 @@
+---
+title: "PML Course Project"
+author: "Pebblez"
+date: "2025-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+This is the final report for Coursera’s Practical Machine Learning course, as part of the Data Science Specialization track offered by John Hopkins. The project uses data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants doing barbell lifts to predict the manner in which they did the exercise. This is the “classe” variable in the training set. We trained 3 models: Decision Tree, Random Forest, and Gradient Boosted Trees on the training set. We then tested the models using a validation set randomly selected from the training csv data, and obtained the accuracy and out of sample error rate. Based on those numbers, we concluded that **Random Forest** is the best model (accuracy = 0.997 and ose = 0.0029), and use it to predict 20 cases using the test csv set.
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. This analysis will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+## Data Sources
+
+All data were downloaded on 1 Dec 2025 from the following links:
+
+[Training data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+[Test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The complete data for this project come from this source: 
+http://groupware.les.inf.puc-rio.br/har
+
+# Setup
+First we called the libraries necessary to complete the analysis, then we set the seed for reproducibility.
+```{r libraries, message=FALSE, warning=FALSE}
+library(caret)
+library(kernlab)
+library(rattle)
+set.seed(1234)
+```
+
+# Loading and Preparing Data
+Next we read in the data sets and went through a few steps to clean and partition the data.
+
+```{r data}
+#Load and clean data
+train <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+dim(train); dim(test)
+
+    #remove columns with NA values
+completedata <- (colSums(is.na(train)) == 0)
+train <- train[, completedata]
+dim(train)
+
+    #remove Near Zero Variance variables
+nvz <- nearZeroVar(train)
+train <- train[,-nvz]
+dim(train)
+
+    #remove ID variables
+train <- train[, -(1:5)]
+dim(train)
+```
+
+```{r partition}
+#Partition cleaned train dataset into training and validation sets, leaving
+#the test dataset unchanged for use later.
+
+inTrain  <- createDataPartition(train$classe, p=0.7, list=FALSE)
+trainset <- train[inTrain, ]
+validset  <- train[-inTrain, ]
+dim(trainset); dim(validset)
+```
+
+# Creating and Testing Models
+Next we applied three popular PML models (decision tree, random forests, and boosted trees) to identify the regression method with highest accuracy to be used later.
+
+## Decision Tree Method
+```{r decisiontree}
+Treefit<- train(classe~., method="rpart", data=trainset)
+fancyRpartPlot(Treefit$finalModel, sub = "")
+
+Treepred <- predict(Treefit, validset)
+confusionMatrix(Treepred, factor(validset$classe))
+Treeacc<- confusionMatrix(Treepred, factor(validset$classe))$overall["Accuracy"]
+Treeose <- 1-as.numeric(confusionMatrix(factor(validset$classe), 
+                                        Treepred)$overall[1])
+```
+
+```{r treeplot}
+plot(Treefit)
+```
+
+## Random Forests Method
+```{r randomforest}
+RFfit <- train(classe~., method="rf", data=trainset)
+RFpred <- predict(RFfit, validset)
+confusionMatrix(RFpred, factor(validset$classe))
+RFacc<- confusionMatrix(RFpred, factor(validset$classe))$overall["Accuracy"]
+RFose <- 1-as.numeric(confusionMatrix(factor(validset$classe), 
+                                        RFpred)$overall[1])
+```
+
+```{r rfplot}
+plot(RFfit)
+```
+
+## Boosted Trees Method
+```{r gbm}
+GBMfit <- train(classe~., method="gbm", data=trainset, verbose = F)
+GBMpred <- predict(GBMfit, validset)
+confusionMatrix(GBMpred, factor(validset$classe))
+GBMacc<- confusionMatrix(GBMpred, factor(validset$classe))$overall["Accuracy"]
+GBMose <- 1-as.numeric(confusionMatrix(factor(validset$classe), 
+                                      GBMpred)$overall[1])
+```
+
+```{r gbmplot}
+plot(GBMfit)
+```
+
+# Results
+After running three different models, we compared the accuracy and out-of-sample error for each one. The results indicated that the **Random Forest** method is the best model, with 99.7% accuracy and 0.0029 estimated out-of-sample error. Therefore we used the Random Forest Model to predict our test cases.
+
+```{r compare}
+acc<- rbind(Treeacc, RFacc, GBMacc)
+ose<- rbind(Treeose, RFose, GBMose)
+cbind(acc, ose)
+```
+
+## Predicting Test Cases
+Returning to the originally downloaded test dataset that we did not process or look at, we used the Random Forest model to predict the manner in which the exercise was done in each test case.
+
+```{r predict}
+predictTEST <- predict(RFfit, newdata=test)
+predictTEST
+```
+
